@@ -1,0 +1,21 @@
+apply plugin: 'java'
+
+sourceCompatibility = JavaVersion.VERSION_1_8
+targetCompatibility = JavaVersion.VERSION_1_8
+
+dependencies {
+    implementation "androidx.annotation:annotation:${supportVersion}"
+}
+
+/* compose library variables needed for publishing */
+ext.description = 'AutoProxy Annotation for marking interfaces or abstract classes for processing.'
+apply from: rootProject.file('gradle/compose.credencials.gradle'), to:project
+apply from: project.file('credentials.gradle')
+
+/* https://github.com/nuuneoi/JCenter */
+apply from: 'https://raw.githubusercontent.com/nuuneoi/JCenter/master/installv1.gradle'
+//apply from: 'https://raw.githubusercontent.com/nuuneoi/JCenter/master/bintrayv1.gradle'
+apply from: project.parent.file('gradle/bintrayv2.gradle')
+
+bintray.dryRun = bintray_dryrun
+tasks.bintrayUpload.dependsOn install

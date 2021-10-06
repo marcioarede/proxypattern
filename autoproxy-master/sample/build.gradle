@@ -1,0 +1,132 @@
+apply plugin: 'com.android.application'
+apply plugin: 'kotlin-android'
+apply plugin: 'kotlin-android-extensions'
+apply plugin: 'kotlin-kapt'
+
+/* https://github.com/ben-manes/gradle-versions-plugin */
+//region apply plugin: "com.github.ben-manes.versions"
+if (useVersions) {
+    apply plugin: "com.github.ben-manes.versions"
+
+    dependencyUpdates.resolutionStrategy {
+        componentSelection { rules ->
+            rules.all { selection ->
+                boolean rejected = ['alpha', 'beta', 'rc', 'cr', 'm', 'preview', 'alpha-preview'].any { qualifier ->
+                    selection.candidate.version ==~ /(?i).*[.-]${qualifier}[.\d-]*/
+                }
+                if (rejected) {
+                    selection.reject('Release candidate')
+                }
+            }
+        }
+    }
+}
+//endregion
+
+/** Allow to override min sdk by provided compiler properties. */
+def minSdk = {
+    def propertyName = 'com.olku.app.minSdk'
+    def defaultSdk = androidMinSdk
+
+    project.hasProperty(propertyName) ? project.property(propertyName) : defaultSdk
+}
+
+android {
+    compileSdkVersion androidCompileSdk
+    buildToolsVersion androidBuildTools
+
+    defaultConfig {
+        applicationId 'com.olku.autoproxy.sample'
+
+        minSdkVersion minSdk()
+        targetSdkVersion androidTargetSdk
+
+        versionCode 1
+        versionName "1.0"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+        debug {
+
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+    }
+
+    lintOptions {
+        abortOnError false
+    }
+
+    sourceSets {
+        main.kotlin.srcDirs += 'src/main/kotlin'
+    }
+
+    kotlinOptions {
+        jvmTarget = '1.8'
+    }
+}
+
+dependencies {
+    implementation "androidx.annotation:annotation:${supportVersion}"
+    implementation "androidx.appcompat:appcompat:${supportVersion}"
+    implementation 'androidx.constraintlayout:constraintlayout:2.0.4'
+
+    /* RxJava 1.xx - https://github.com/ReactiveX/RxAndroid */
+    implementation "io.reactivex:rxandroid:1.2.1"
+    implementation "io.reactivex:rxjava:1.3.8"
+
+    /* RxJava 2.xx - https://github.com/ReactiveX/RxJava/tree/2.x */
+    implementation 'io.reactivex.rxjava2:rxjava:2.2.21'
+
+    /* RxJava 3.xx - https://github.com/ReactiveX/RxJava/tree/3.x */
+    implementation 'io.reactivex.rxjava3:rxjava:3.0.13'
+
+    /* AutoProxy generator */
+    compileOnly project(':autoproxy-annotations')
+    compileOnly project(':autoproxy-rx-annotations')
+    compileOnly project(':autoproxy-rx-generators')
+    compileOnly project(':autoproxy-rx2-generators')
+    compileOnly project(':autoproxy-rx3-generators')
+
+    kapt project(':autoproxy-rx-generators')
+    kapt project(':autoproxy-rx2-generators')
+    kapt project(':autoproxy-rx3-generators')
+    kapt project(':autoproxy-processor')
+
+    /* AutoValue, https://github.com/google/auto */
+    compileOnly "org.glassfish:javax.annotation:10.0-b28"
+    compileOnly "com.google.auto.value:auto-value-annotations:1.7.4"
+
+    kapt "com.google.auto.value:auto-value:1.7.4"
+    kapt "com.google.code.findbugs:jsr305:3.0.2"
+
+    /* Kotlin Support */
+    /* Android KTX https://github.com/android/android-ktx */
+    implementation "androidx.core:core-ktx:${androidKTXVersion}"
+
+    /* Kotlin Standard Library https://kotlinlang.org/api/latest/jvm/stdlib/index.html */
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:${kotlinVersion}"
+
+    apply from: rootProject.file('gradle/dependencies.tdd.gradle'), to: project
+}
+
+kapt {
+    correctErrorTypes = true
+    mapDiagnosticLocations = true
+
+    // Compiling with JDK 11+, but kapt doesn't forward source/target versions.
+    javacOptions {
+        option("-source", "8")
+        option("-target", "8")
+    }
+
+}

@@ -1,0 +1,188 @@
+buildscript {
+    ext {
+        gradlePlugin = project.GRADLE_PLUGIN
+        useVersions = Boolean.parseBoolean("${project.USE_VERSIONS}")
+        /* Test Driven Development */
+        useTdd = Boolean.parseBoolean("${project.USE_TDD}")
+        useJacoco = useTdd && Boolean.parseBoolean("${project.USE_JACOCO}")
+        /* Versions */
+        junitVersion = project.JUNIT_VERSION
+        jacocoVersion = project.JACOCO_VERSION
+        kotlinVersion = project.KOTLIN_VERSION
+        jfrogVersion = project.JFROG_PLUGIN
+        dcendVersion = project.DCENDENTS_PLUGIN
+        loggerVersion = project.LOGGER_PLUGIN
+    }
+    repositories {
+        mavenLocal()
+        google()
+        jcenter()
+        maven { url = uri("https://plugins.gradle.org/m2/") }
+    }
+    dependencies {
+        /* Connect Android Build Plugin */
+        classpath "com.android.tools.build:gradle:${gradlePlugin}"
+
+        /* In case of submodule usage, do not try to apply own plugin classpath, root project is responsible for that. */
+        if (rootProject.buildDir == project.buildDir) {
+            /* Connect Android Build Plugin */
+            classpath "com.android.tools.build:gradle:${gradlePlugin}"
+            /* Kotlin, https://mvnrepository.com/artifact/org.jetbrains.kotlin/kotlin-gradle-plugin */
+            classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:${kotlinVersion}"
+            /* To confirm JaCoCo version run: $ ./gradlew buildEnvironment */
+            //region classpath "org.jacoco:org.jacoco.core:${jacocoVersion}"
+            if (useJacoco) {
+                /* Resolves issue of incorrect version use in one of jacoco/android plugin inner tasks */
+                classpath "org.jacoco:org.jacoco.core:${jacocoVersion}"
+                classpath "org.jacoco:org.jacoco.report:${jacocoVersion}"
+            }
+            //endregion
+
+            /* PUBLISHING, https://inthecheesefactory.com/blog/how-to-upload-library-to-jcenter-maven-central-as-dependency/en */
+
+            /* https://github.com/bintray/gradle-bintray-plugin */
+            classpath "com.jfrog.bintray.gradle:gradle-bintray-plugin:${jfrogVersion}"
+            /* https://github.com/dcendents/android-maven-gradle-plugin */
+            classpath "com.github.dcendents:android-maven-gradle-plugin:${dcendVersion}"
+            /* https://github.com/ben-manes/gradle-versions-plugin */
+            //region classpath "com.github.ben-manes:gradle-versions-plugin:0.20.0"
+            if (useVersions) {
+                classpath "com.github.ben-manes:gradle-versions-plugin:0.25.0"
+            }
+            //endregion
+
+            //region classpath "com.adarshr:gradle-test-logger-plugin:${loggerVersion}"
+            if (useTdd) {
+                /* https://github.com/radarsh/gradle-test-logger-plugin */
+                classpath "com.adarshr:gradle-test-logger-plugin:${loggerVersion}"
+            }
+            //endregion
+        }
+    }
+}
+
+allprojects {
+    repositories {
+        mavenLocal()
+        google()
+        jcenter()
+    }
+
+    /* PUBLISH GLOBAL VARIABLES FOR ALL SUB-PROJECTS */
+    ext {
+        /* Android SDK and Tools */
+        androidMinSdk = Integer.parseInt(project.MIN_SDK)
+        androidTargetSdk = Integer.parseInt(project.TARGET_SDK)
+        androidCompileSdk = Integer.parseInt(project.COMPILE_SDK)
+        androidBuildTools = project.BUILD_TOOLS
+
+        /* 3rd party libraries */
+        supportVersion = project.ANDROID_X_VERSION
+
+        /* Test Driven Development */
+        useTdd = Boolean.parseBoolean("${project.USE_TDD}")
+        useJacoco = useTdd && Boolean.parseBoolean("${project.USE_JACOCO}")
+
+        /* Kotlin Support */
+        kotlinVersion = project.KOTLIN_VERSION
+        androidKTXVersion = project.ANDROID_KTX_VERSION
+
+        /* Load version override properties from file. File is a result of 'gradle/version-up.sh' script. */
+        def filePath = "${project.projectDir}/version.properties"
+        if (new File(filePath).exists()) {
+            Properties properties = new Properties()
+            properties.load(new FileInputStream(filePath))
+
+            logger.info("  Version Info override for module '${project.name}' applied.")
+            properties.each { p ->
+                set(p.key, p.value)
+                logger.info("    '${p.key}' = '${p.value}'")
+            }
+        }
+    }
+
+    /* Update Java compiler options for making visible all warnings. JAVA 8! */
+    tasks.withType(JavaCompile) {
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+
+        /* JAVA 8 in Libraries: https://goo.gl/ueVMG7 */
+        configure(options) {
+            // display additional information about annotation processing
+            compilerArgs << "-XprintRounds"
+            compilerArgs << "-XprintProcessorInfo"
+            compilerArgs << "-Xmaxerrs" << "1000000"
+
+            compilerArgs << "-Xlint:all"            // Turn on all warnings
+            compilerArgs << "-Xlint:-options"       // Turn off "missing" bootclasspath warning
+            compilerArgs << "-Xlint:-path"          // Turn off warning - annotation processing
+            compilerArgs << "-Xlint:-processing"
+            // Turn off warning about not claiming annotations
+            compilerArgs << "-Xlint:-unchecked"     // Turn off warning unchecked cast used
+            compilerArgs << "-Xlint:-rawtypes"      // Turn off warning for raw types
+            compilerArgs << "-Xlint:-classfile"
+            // Turn off warning classfile version 52.0 vs 51.0
+            compilerArgs << "-Xlint:-sunapi"        // Turn off SUN Api usage warnings
+            compilerArgs << "-XDenableSunApiLintControl"
+            compilerArgs << "-Werror"               // Turn warnings into errors
+            compilerArgs << "-Xdiags:verbose"       // Turn on verbose errors
+
+            /* force incremental java compilation */
+            incremental = true
+
+            deprecation = true
+            encoding = 'UTF-8'
+//
+//            /* hack android libraries, force support of Java 8 */
+//            compilerArgs << "-Xbootclasspath/a:" + System.properties.get("java.home") + "/lib/rt.jar"
+        }
+    }
+
+    /* Turn on logging for all tests, filter to show failures/skips only */
+    tasks.withType(Test) {
+        testLogging {
+            exceptionFormat "full"
+            showCauses true
+            showExceptions true
+            showStackTraces true
+            showStandardStreams true
+            events "failed", "skipped"
+        }
+    }
+}
+
+/** remove the root project build directory on clean task call. */
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}
+
+/** Force full version of gradle instead of binaries only. */
+tasks.wrapper {
+    distributionType = Wrapper.DistributionType.ALL
+}
+
+println "Is submodule: ${rootProject.buildDir != project.buildDir}"
+
+/** Auto-compose credential file for 'first-run' project. */
+def fc = project.file('credentials.gradle')
+if (!fc.exists()) {
+    def NL = "\n"
+    fc.createNewFile()
+
+    fc.append("ext.gpg_password = '<secret>'" + NL)
+    fc.append("ext.bintray_apikey = '<secret>'" + NL)
+    fc.append("ext.bintray_dryrun = true" + NL)
+//    fc.append("throw new Exception('Change Properties Template and delete this line')" + NL)
+    fc.append(NL)
+    fc.append("ext.bintray_fullname = 'Oleksandr Kucherenko'" + NL)
+    fc.append("ext.bintray_email = 'kucherenko.alex@gmail.com'" + NL)
+    fc.append("ext.bintray_user = 'kucherenko-alex'" + NL)
+    fc.append("ext.bintray_repo = 'android'" + NL)
+    fc.append("ext.bintray_group = 'com.olku'" + NL)
+    fc.append("ext.bintray_name = 'autoproxy'" + NL)
+    fc.append(NL)
+    fc.append("ext.git_url = 'https://github.com/OleksandrKucherenko/autoproxy'" + NL)
+}
+
+/** Load root credentials */
+apply from: file('credentials.gradle')
